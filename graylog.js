@@ -22,6 +22,7 @@ GLOBAL.graylogToConsole = false;
 GLOBAL.graylogFacility = 'Node.js';
 GLOBAL.graylogSequence = 0;
 GLOBAL.graylogChunkSize = 1100; // 8192 is the maximum
+GLOBAL.ignoreLevel = Infinity;
 
 function generateMessageId() {
 	return '' + (Date.now() + Math.floor(Math.random()*10000));
@@ -122,6 +123,10 @@ function log(shortMessage, a, b) {
 	opts.host = opts.host || GLOBAL.graylogHostname;
 	opts.level = opts.level !== undefined ? opts.level : GLOBAL.LOG_INFO;
 	opts.facility = opts.facility || GLOBAL.graylogFacility;
+
+	if(GLOBAL.ignoreLevel <= opts.level){
+		return;
+	}
 
 	if (opts.stack) {
 		retrieveFileInfo(opts);
