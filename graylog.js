@@ -23,6 +23,7 @@ GLOBAL.graylogFacility = 'Node.js';
 GLOBAL.graylogSequence = 0;
 GLOBAL.graylogChunkSize = 1100; // 8192 is the maximum
 GLOBAL.ignoreLevel = Infinity;
+GLOBAL.graylogAdditionalFields = {};
 
 function generateMessageId() {
 	return '' + (Date.now() + Math.floor(Math.random()*10000));
@@ -101,7 +102,7 @@ function sendSingleShot(graylog2Client, compressedMessage, address) {
 function resolveAndSend(graylog2Client, compressedMessage, dnsName, sendFunc) {
 	dns.resolve4(GLOBAL.graylogHost, function(dnsErr, addr) {
 		if (dnsErr) {
-			util.debug("Graylog oops: DNS Error (" + dnsErr + "), I print to stderr and give up: \n" + message.toString());
+			util.debug("Graylog oops: DNS Error (" + dnsErr + "), I print to stderr and give up: \n");
 			return;
 		}
 
@@ -127,6 +128,14 @@ function log(shortMessage, a, b) {
 	if(GLOBAL.ignoreLevel <= opts.level){
 		return;
 	}
+	// Add global additional fields to the message
+	var additionalFields = GLOBAL.graylogAdditionalFields;
+	Object.keys(additionalFields).forEach(function(prop) {
+		// Don't overwrite log level additional fields
+		if (typeof opts[prop] === 'undefined') {
+			opts[prop] = additionalFields[prop];	
+		}
+	});
 
 	if (opts.stack) {
 		retrieveFileInfo(opts);
@@ -152,11 +161,16 @@ function log(shortMessage, a, b) {
 		}
 
 		var graylog2Client = dgram.createSocket("udp4");
+
+		graylog2Client.on("error", function(err){
+			console.log("Graylog oops: UDP error (%s)", err.message);
+		});
+
 		if (compressedMessage.length > GLOBAL.graylogChunkSize) {
 			sendFunc = sendChunked;
 		}
 
-		if (net.isIPv4(GLOBAL.graylogHost)) {
+		if (!net.isIPv4(GLOBAL.graylogHost)) {
 			resolveAndSend(graylog2Client, compressedMessage, GLOBAL.graylogHost, sendFunc);
 		} else { 
 			sendFunc(graylog2Client, compressedMessage, GLOBAL.graylogHost);
