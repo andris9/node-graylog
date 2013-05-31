@@ -66,7 +66,7 @@ function sendChunked(graylog2Client, compressedMessage, address) {
 		chunksWritten = 0;
 
 	if (sequenceSize > 128) {
-		util.debug("Graylog oops: log message is larger than 128 chunks, I print to stderr and give up: \n" + message.toString());
+		util.debug(Date() + " Graylog oops: log message is larger than 128 chunks, I print to stderr and give up: \n" + message.toString());
 		return;
 	}
 
@@ -102,7 +102,7 @@ function sendSingleShot(graylog2Client, compressedMessage, address) {
 function resolveAndSend(graylog2Client, compressedMessage, dnsName, sendFunc) {
 	dns.resolve4(GLOBAL.graylogHost, function(dnsErr, addr) {
 		if (dnsErr) {
-			util.debug("Graylog oops: DNS Error (" + dnsErr + "), I print to stderr and give up: \n");
+			util.debug(Date() + " Graylog oops: DNS Error (" + dnsErr + "), I print to stderr and give up: \n");
 			return;
 		}
 
@@ -163,7 +163,7 @@ function log(shortMessage, a, b) {
 		var graylog2Client = dgram.createSocket("udp4");
 
 		graylog2Client.on("error", function(err){
-			console.log("Graylog oops: UDP error (%s)", err.message);
+			util.debug(Date() + " Graylog oops: UDP error ("+err.message+")\n");
 		});
 
 		if (compressedMessage.length > GLOBAL.graylogChunkSize) {
