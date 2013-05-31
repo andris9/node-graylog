@@ -160,7 +160,12 @@ function log(shortMessage, a, b) {
 			return;
 		}
 
-		var graylog2Client = dgram.createSocket("udp4");
+		try{
+			var graylog2Client = dgram.createSocket("udp4");
+		}catch(E){
+			util.debug(Date() + " Graylog oops: UDP binding error ("+E.message+")\n");
+			return;
+		}
 
 		graylog2Client.on("error", function(err){
 			util.debug(Date() + " Graylog oops: UDP error ("+err.message+")\n");
