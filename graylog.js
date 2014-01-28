@@ -1,4 +1,6 @@
-var 
+"use strict";
+
+var
 	zlib = require('zlib'),
 	dgram = require('dgram'),
 	util = require('util'),
@@ -30,7 +32,7 @@ function generateMessageId() {
 }
 
 function _logToConsole(shortMessage, opts) {
-	var 
+	var
 		consoleString = shortMessage,
 		additionalFields = [];
 
@@ -44,9 +46,9 @@ function _logToConsole(shortMessage, opts) {
 				"  " +
 				key.substr(1,1024) +
 				": " +
-				'\033[' + 34 + 'm' + 
+				'\x1b[' + 34 + 'm' +
 				opts[key] +
-				'\033[' + 39 + 'm'
+				'\x1b[' + 39 + 'm'
 			);
 		}
 	});
@@ -59,20 +61,27 @@ function _logToConsole(shortMessage, opts) {
 }
 
 function sendChunked(graylog2Client, compressedMessage, address) {
-	var 
+	var
 		messageId = generateMessageId(),
 		sequenceSize = Math.ceil(compressedMessage.length / GLOBAL.graylogChunkSize),
 		byteOffset = 0,
 		chunksWritten = 0;
 
 	if (sequenceSize > 128) {
-		util.debug(Date() + " Graylog oops: log message is larger than 128 chunks, I print to stderr and give up: \n" + message.toString());
+		util.debug(Date() + " Graylog oops: log message is larger than 128 chunks, I print to stderr and give up: \n" + compressedMessage.toString());
 		return;
 	}
 
+	var sendHandler = function() {
+		chunksWritten++;
+		if (chunksWritten == sequenceSize) {
+			graylog2Client.close();
+		}
+	};
+
 	for(var sequence=0; sequence<sequenceSize; sequence++) {
-		var 
-			chunkBytes = (byteOffset + GLOBAL.graylogChunkSize) < compressedMessage.length ? GLOBAL.graylogChunkSize : (compressedMessage.length - byteOffset), 
+		var
+			chunkBytes = (byteOffset + GLOBAL.graylogChunkSize) < compressedMessage.length ? GLOBAL.graylogChunkSize : (compressedMessage.length - byteOffset),
 			chunk = new Buffer(chunkBytes + 12);
 
 		chunk[0] = 0x1e;
@@ -83,18 +92,13 @@ function sendChunked(graylog2Client, compressedMessage, address) {
 		compressedMessage.copy(chunk, 12, byteOffset, byteOffset+chunkBytes);
 
 		byteOffset += chunkBytes;
-		
-		graylog2Client.send(chunk, 0, chunk.length, GLOBAL.graylogPort, address, function (err, byteCount) {
-			chunksWritten++;
-			if (chunksWritten == sequenceSize) {
-				graylog2Client.close();
-			}
-		});
+
+		graylog2Client.send(chunk, 0, chunk.length, GLOBAL.graylogPort, address, sendHandler);
 	}
 }
 
 function sendSingleShot(graylog2Client, compressedMessage, address) {
-	graylog2Client.send(compressedMessage, 0, compressedMessage.length, GLOBAL.graylogPort, address, function (err, byteCount) {
+	graylog2Client.send(compressedMessage, 0, compressedMessage.length, GLOBAL.graylogPort, address, function() {
 		graylog2Client.close();
 	});
 }
@@ -133,7 +137,7 @@ function log(shortMessage, a, b) {
 	Object.keys(additionalFields).forEach(function(prop) {
 		// Don't overwrite log level additional fields
 		if (typeof opts[prop] === 'undefined') {
-			opts[prop] = additionalFields[prop];	
+			opts[prop] = additionalFields[prop];
 		}
 	});
 
@@ -142,16 +146,16 @@ function log(shortMessage, a, b) {
 	}
 
 	if (GLOBAL.graylogSequence) {
-		opts['_logSequence'] = GLOBAL.graylogSequence++;
+		opts._logSequence = GLOBAL.graylogSequence++;
 	}
 
 	opts.short_message = shortMessage;
-	
-	if (GLOBAL.graylogToConsole) { 
+
+	if (GLOBAL.graylogToConsole) {
 		_logToConsole(shortMessage, opts);
 	}
 
-	var 
+	var
 		message = new Buffer(JSON.stringify(opts)),
 		sendFunc = sendSingleShot;
 
@@ -160,8 +164,10 @@ function log(shortMessage, a, b) {
 			return;
 		}
 
+		var graylog2Client;
+
 		try{
-			var graylog2Client = dgram.createSocket("udp4");
+			graylog2Client = dgram.createSocket("udp4");
 		}catch(E){
 			util.debug(Date() + " Graylog oops: UDP binding error ("+E.message+")\n");
 			return;
@@ -177,7 +183,7 @@ function log(shortMessage, a, b) {
 
 		if (!net.isIPv4(GLOBAL.graylogHost)) {
 			resolveAndSend(graylog2Client, compressedMessage, GLOBAL.graylogHost, sendFunc);
-		} else { 
+		} else {
 			sendFunc(graylog2Client, compressedMessage, GLOBAL.graylogHost);
 		}
 	});
